@@ -4,7 +4,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import async_session_factory
 
-
 router = APIRouter(tags=["health"])
 
 
