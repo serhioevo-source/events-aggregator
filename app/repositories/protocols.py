@@ -4,6 +4,7 @@ from typing import Protocol
 
 from app.models.event import Event
 from app.models.sync_state import SyncState
+from app.models.ticket import Ticket
 
 
 class EventRepositoryProtocol(Protocol):
@@ -28,4 +29,27 @@ class SyncStateRepositoryProtocol(Protocol):
         last_sync_time: datetime,
         last_changed_at: datetime | None,
         sync_status: str,
+    ) -> None: ...
+
+
+class TicketRepositoryProtocol(Protocol):
+    async def create(
+        self,
+        *,
+        ticket_id: uuid.UUID,
+        event_id: uuid.UUID,
+        first_name: str,
+        last_name: str,
+        email: str,
+        seat: str,
+    ) -> Ticket: ...
+
+    async def get_by_id(
+        self,
+        ticket_id: uuid.UUID,
+    ) -> Ticket | None: ...
+
+    async def delete(
+        self,
+        ticket_id: uuid.UUID,
     ) -> None: ...
