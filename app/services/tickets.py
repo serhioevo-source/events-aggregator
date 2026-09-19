@@ -1,6 +1,6 @@
 import uuid
 
-from app.clients.events_provider import EventsProviderClient
+from app.clients.protocols import EventsProviderProtocol
 from app.repositories.protocols import (
     EventRepositoryProtocol,
     TicketRepositoryProtocol,
@@ -28,7 +28,7 @@ class TicketService:
         self,
         event_repository: EventRepositoryProtocol,
         ticket_repository: TicketRepositoryProtocol,
-        provider_client: EventsProviderClient,
+        provider_client: EventsProviderProtocol,
     ) -> None:
         self.event_repository = event_repository
         self.ticket_repository = ticket_repository

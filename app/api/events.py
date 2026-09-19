@@ -3,13 +3,11 @@ import uuid
 from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.events_provider import EventsProviderClient, EventsProviderError
 from app.core.config import settings
 from app.db.session import get_session
 from app.repositories.events import EventRepository
-from app.repositories.sync_state import SyncStateRepository
 from app.schemas.event import (
     EventResponse,
     EventSeatsResponse,
@@ -22,7 +20,7 @@ from app.services.seats import (
     SeatsCacheEntry,
     SeatsService,
 )
-from app.services.sync import SyncEventsService
+from app.services.sync_runner import run_events_sync
 
 router = APIRouter(tags=["events"])
 
@@ -49,39 +47,18 @@ def event_to_response(event) -> EventResponse:
 
 @router.post("/sync/trigger")
 async def trigger_sync() -> dict[str, int | str]:
-    async for session in get_session():
-        session: AsyncSession
+    try:
+        count = await run_events_sync()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Events Provider synchronization failed",
+        ) from exc
 
-        event_repository = EventRepository(session)
-        sync_state_repository = SyncStateRepository(session)
-
-        provider_client = EventsProviderClient(
-            base_url=settings.events_provider_base_url,
-            api_key=settings.events_provider_api_key,
-        )
-
-        service = SyncEventsService(
-            event_repository=event_repository,
-            sync_state_repository=sync_state_repository,
-            provider_client=provider_client,
-        )
-
-        try:
-            count = await service.sync()
-            await session.commit()
-        except Exception as exc:
-            await session.rollback()
-            raise HTTPException(
-                status_code=502,
-                detail="Events Provider synchronization failed",
-            ) from exc
-
-        return {
-            "status": "ok",
-            "synced": count,
-        }
-
-    raise HTTPException(status_code=500, detail="Database session unavailable")
+    return {
+        "status": "ok",
+        "synced": count,
+    }
 
 
 @router.get("/events", response_model=EventsListResponse)

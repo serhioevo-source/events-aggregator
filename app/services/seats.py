@@ -2,7 +2,7 @@ import time
 import uuid
 from dataclasses import dataclass
 
-from app.clients.events_provider import EventsProviderClient
+from app.clients.protocols import EventsProviderProtocol
 from app.repositories.protocols import EventRepositoryProtocol
 
 
@@ -24,7 +24,7 @@ class SeatsService:
     def __init__(
         self,
         event_repository: EventRepositoryProtocol,
-        provider_client: EventsProviderClient,
+        provider_client: EventsProviderProtocol,
         cache: dict[uuid.UUID, SeatsCacheEntry],
         cache_ttl_seconds: int,
     ) -> None:

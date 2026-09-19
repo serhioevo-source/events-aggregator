@@ -3,9 +3,11 @@ from typing import Any
 
 import httpx
 
+from app.clients.protocols import EventsProviderProtocol
+
 
 class EventsProviderError(Exception):
-    """Error returned by Events Provider API."""
+    """Error communicating with Events Provider API."""
 
 
 class EventsProviderClient:
@@ -29,6 +31,31 @@ class EventsProviderClient:
             follow_redirects=True,
         )
 
+    async def _request(
+        self,
+        method: str,
+        url: str,
+        **kwargs: Any,
+    ) -> httpx.Response:
+        try:
+            async with self._create_client() as client:
+                response = await client.request(
+                    method,
+                    url,
+                    headers=self.headers,
+                    **kwargs,
+                )
+
+            response.raise_for_status()
+            return response
+
+        except httpx.HTTPStatusError as exc:
+            raise EventsProviderError(
+                f"Events Provider returned HTTP {exc.response.status_code}"
+            ) from exc
+        except httpx.RequestError as exc:
+            raise EventsProviderError("Events Provider request failed") from exc
+
     async def events(
         self,
         changed_at: str,
@@ -37,26 +64,20 @@ class EventsProviderClient:
         request_url = url or f"{self.base_url}/api/events/"
         params = None if url else {"changed_at": changed_at}
 
-        async with self._create_client() as client:
-            response = await client.get(
-                request_url,
-                params=params,
-                headers=self.headers,
-            )
-
-        self._raise_for_status(response)
+        response = await self._request(
+            "GET",
+            request_url,
+            params=params,
+        )
         return response.json()
 
     async def seats(self, event_id: str) -> list[str]:
-        async with self._create_client() as client:
-            response = await client.get(
-                f"{self.base_url}/api/events/{event_id}/seats/",
-                headers=self.headers,
-            )
+        response = await self._request(
+            "GET",
+            f"{self.base_url}/api/events/{event_id}/seats/",
+        )
 
-        self._raise_for_status(response)
-        data = response.json()
-        return data["seats"]
+        return response.json()["seats"]
 
     async def register(
         self,
@@ -66,21 +87,17 @@ class EventsProviderClient:
         email: str,
         seat: str,
     ) -> str:
-        payload = {
-            "first_name": first_name,
-            "last_name": last_name,
-            "email": email,
-            "seat": seat,
-        }
+        response = await self._request(
+            "POST",
+            f"{self.base_url}/api/events/{event_id}/register/",
+            json={
+                "first_name": first_name,
+                "last_name": last_name,
+                "email": email,
+                "seat": seat,
+            },
+        )
 
-        async with self._create_client() as client:
-            response = await client.post(
-                f"{self.base_url}/api/events/{event_id}/register/",
-                headers=self.headers,
-                json=payload,
-            )
-
-        self._raise_for_status(response)
         return response.json()["ticket_id"]
 
     async def unregister(
@@ -88,30 +105,19 @@ class EventsProviderClient:
         event_id: str,
         ticket_id: str,
     ) -> bool:
-        async with self._create_client() as client:
-            response = await client.request(
-                "DELETE",
-                f"{self.base_url}/api/events/{event_id}/unregister/",
-                headers=self.headers,
-                json={"ticket_id": ticket_id},
-            )
+        response = await self._request(
+            "DELETE",
+            f"{self.base_url}/api/events/{event_id}/unregister/",
+            json={"ticket_id": ticket_id},
+        )
 
-        self._raise_for_status(response)
         return bool(response.json()["success"])
-
-    def _raise_for_status(self, response: httpx.Response) -> None:
-        try:
-            response.raise_for_status()
-        except httpx.HTTPStatusError as exc:
-            raise EventsProviderError(
-                f"Events Provider returned HTTP {response.status_code}"
-            ) from exc
 
 
 class EventsPaginator:
     def __init__(
         self,
-        client: EventsProviderClient,
+        client: EventsProviderProtocol,
         changed_at: str,
     ) -> None:
         self.client = client
