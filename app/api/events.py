@@ -5,19 +5,28 @@ from datetime import UTC, date, datetime
 from fastapi import APIRouter, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clients.events_provider import EventsProviderClient
+from app.clients.events_provider import EventsProviderClient, EventsProviderError
 from app.core.config import settings
 from app.db.session import get_session
 from app.repositories.events import EventRepository
 from app.repositories.sync_state import SyncStateRepository
 from app.schemas.event import (
     EventResponse,
+    EventSeatsResponse,
     EventsListResponse,
     PlaceResponse,
+)
+from app.services.seats import (
+    EventNotFoundError,
+    EventNotPublishedError,
+    SeatsCacheEntry,
+    SeatsService,
 )
 from app.services.sync import SyncEventsService
 
 router = APIRouter(tags=["events"])
+
+seats_cache: dict[uuid.UUID, SeatsCacheEntry] = {}
 
 
 def event_to_response(event) -> EventResponse:
@@ -129,6 +138,7 @@ async def list_events(
 
     raise HTTPException(status_code=500, detail="Database session unavailable")
 
+
 @router.get("/events/{event_id}", response_model=EventResponse)
 async def get_event(event_id: uuid.UUID) -> EventResponse:
     async for session in get_session():
@@ -143,6 +153,55 @@ async def get_event(event_id: uuid.UUID) -> EventResponse:
             )
 
         return event_to_response(event)
+
+    raise HTTPException(
+        status_code=500,
+        detail="Database session unavailable",
+    )
+
+
+@router.get(
+    "/events/{event_id}/seats",
+    response_model=EventSeatsResponse,
+)
+async def get_event_seats(event_id: uuid.UUID) -> EventSeatsResponse:
+    async for session in get_session():
+        repository = EventRepository(session)
+
+        provider_client = EventsProviderClient(
+            base_url=settings.events_provider_base_url,
+            api_key=settings.events_provider_api_key,
+        )
+
+        service = SeatsService(
+            event_repository=repository,
+            provider_client=provider_client,
+            cache=seats_cache,
+            cache_ttl_seconds=settings.seats_cache_ttl_seconds,
+        )
+
+        try:
+            seats = await service.get_available_seats(event_id)
+        except EventNotFoundError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail="Event not found",
+            ) from exc
+        except EventNotPublishedError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail="Event is not published",
+            ) from exc
+        except EventsProviderError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail="Events Provider request failed",
+            ) from exc
+
+        return EventSeatsResponse(
+            event_id=event_id,
+            available_seats=seats,
+        )
 
     raise HTTPException(
         status_code=500,

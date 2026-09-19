@@ -27,3 +27,8 @@ class EventsListResponse(BaseModel):
     next: str | None
     previous: str | None
     results: list[EventResponse]
+
+
+class EventSeatsResponse(BaseModel):
+    event_id: uuid.UUID
+    available_seats: list[str]
