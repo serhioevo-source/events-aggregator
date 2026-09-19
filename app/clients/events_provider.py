@@ -23,6 +23,12 @@ class EventsProviderClient:
     def headers(self) -> dict[str, str]:
         return {"x-api-key": self.api_key}
 
+    def _create_client(self) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            timeout=self.timeout,
+            follow_redirects=True,
+        )
+
     async def events(
         self,
         changed_at: str,
@@ -31,7 +37,7 @@ class EventsProviderClient:
         request_url = url or f"{self.base_url}/api/events/"
         params = None if url else {"changed_at": changed_at}
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._create_client() as client:
             response = await client.get(
                 request_url,
                 params=params,
@@ -42,7 +48,7 @@ class EventsProviderClient:
         return response.json()
 
     async def seats(self, event_id: str) -> list[str]:
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._create_client() as client:
             response = await client.get(
                 f"{self.base_url}/api/events/{event_id}/seats/",
                 headers=self.headers,
@@ -67,7 +73,7 @@ class EventsProviderClient:
             "seat": seat,
         }
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._create_client() as client:
             response = await client.post(
                 f"{self.base_url}/api/events/{event_id}/register/",
                 headers=self.headers,
@@ -82,7 +88,7 @@ class EventsProviderClient:
         event_id: str,
         ticket_id: str,
     ) -> bool:
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._create_client() as client:
             response = await client.request(
                 "DELETE",
                 f"{self.base_url}/api/events/{event_id}/unregister/",
