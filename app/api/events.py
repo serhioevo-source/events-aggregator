@@ -1,4 +1,5 @@
 import math
+import uuid
 from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -127,3 +128,23 @@ async def list_events(
         )
 
     raise HTTPException(status_code=500, detail="Database session unavailable")
+
+@router.get("/events/{event_id}", response_model=EventResponse)
+async def get_event(event_id: uuid.UUID) -> EventResponse:
+    async for session in get_session():
+        repository = EventRepository(session)
+
+        event = await repository.get_by_id(event_id)
+
+        if event is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Event not found",
+            )
+
+        return event_to_response(event)
+
+    raise HTTPException(
+        status_code=500,
+        detail="Database session unavailable",
+    )

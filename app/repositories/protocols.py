@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime
 from typing import Protocol
 
@@ -14,6 +15,8 @@ class EventRepositoryProtocol(Protocol):
         offset: int,
         limit: int,
     ) -> tuple[list[Event], int]: ...
+
+    async def get_by_id(self, event_id: uuid.UUID) -> Event | None: ...
 
 
 class SyncStateRepositoryProtocol(Protocol):

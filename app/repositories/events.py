@@ -79,3 +79,8 @@ class EventRepository:
         result = await self.session.scalars(events_statement)
 
         return list(result), int(count or 0)
+
+    async def get_by_id(self, event_id: uuid.UUID) -> Event | None:
+        return await self.session.scalar(
+            select(Event).where(Event.id == event_id)
+        )
